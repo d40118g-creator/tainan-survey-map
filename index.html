@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>115年臺南市雨水下水道訪評 - 現勘地圖</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+:root{
+  --bg:#0a1628; --panel:#0f2042; --panel2:#162d55; --accent:#00d4ff;
+  --accent2:#ff6b35; --accent3:#4ade80; --gold:#fbbf24; --text:#e8f4fd;
+  --muted:#7ba7c4; --border:#1e4080; --radius:12px;
+}
+*{box-sizing:border-box;margin:0;padding:0; font-family:'Noto Sans TC', "微軟正黑體", sans-serif;}
+body{background:var(--bg);color:var(--text);min-height:100vh;overflow:hidden}
+
+/* Header */
+#header{
+  background:linear-gradient(135deg,#0a1628 0%,#0f2a55 100%);
+  border-bottom:2px solid var(--accent); padding:12px 16px;
+  display:flex; align-items:center; gap:12px;
+}
+#header h1{font-size:16px; font-weight:700; color:#fff; flex:1}
+.badge{background:var(--accent); color:#000; font-size:10px; font-weight:700; padding:2px 8px; border-radius:20px;}
+
+/* Layout */
+#app{display:flex; flex-direction:column; height:calc(100vh - 56px)}
+#map{flex:1; z-index:1}
+#sidebar{
+  background:var(--panel); border-top:2px solid var(--border);
+  overflow-y:auto; max-height:40vh;
+}
+
+/* Site cards */
+#sites-panel{padding:12px}
+.site-card{
+  background:var(--panel2); border:1px solid var(--border); border-radius:var(--radius);
+  padding:12px; margin-bottom:8px; cursor:pointer; position:relative;
+}
+.site-card::before{content:''; position:absolute; left:0; top:0; bottom:0; width:4px; background:var(--accent2);}
+.site-header{display:flex; align-items:center; gap:8px; margin-bottom:6px}
+.site-num{
+  width:24px; height:24px; border-radius:50%; background:var(--accent2);
+  display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700;
+}
+.site-name{font-size:14px; font-weight:700; flex:1}
+.drive-time{font-size:11px; background:rgba(251,191,36,0.15); color:var(--gold); padding:2px 8px; border-radius:20px;}
+.site-actions{display:flex; gap:8px; margin-top:10px}
+.btn-nav{
+  flex:1; background:var(--accent2); color:#fff; border:none; border-radius:6px;
+  padding:8px; font-size:12px; font-weight:700; text-align:center; text-decoration:none;
+}
+
+/* Custom Tooltip */
+.manhole-label{
+  background:rgba(15, 32, 66, 0.9); border:1px solid var(--accent);
+  color:var(--accent); font-weight:bold; font-family:'JetBrains Mono';
+}
+</style>
+</head>
+<body>
+
+<div id="header">
+  <h1>115年雨水下水道訪評現勘</h1>
+  <span class="badge">歸仁區</span>
+</div>
+
+<div id="app">
+  <div id="map"></div>
+  <div id="sidebar">
+    <div id="sites-panel">
+      <div style="font-size:11px; color:var(--muted); margin-bottom:10px;">
+        🚩 起點：永康水資源回收中心 (23.047861, 120.240472)
+      </div>
+      <div id="sites-grid"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+[span_0](start_span)// 更新後的座標資料[span_0](end_span)
+const ORIGIN = {lat:23.047861, lng:120.240472, name:'永康水資源回收中心', label:'起點'};
+
+const SITES = [
+  {id:1, num:1, name:'國光街61號前', lat:22.9683, lng:120.2899, driveMin:19, mh:'14234-A48/A49'},
+  {id:2, num:2, name:'凱旋路二段路燈132號', lat:22.9543, lng:120.2892, driveMin:21, mh:'14232-F27/F28'},
+  {id:3, num:3, name:'民權九街16號前', lat:22.9629, lng:120.2878, driveMin:19, mh:'14233-A28/A27'},
+  {id:4, num:4, name:'大順街與中山七街口', lat:22.9651, lng:120.2832, driveMin:18, mh:'04234-A19/A20'},
+  {id:5, num:5, name:'大仁街395號前', lat:22.9738, lng:120.2991, driveMin:22, mh:'24235-H3/H2'}
+];
+
+let map = L.map('map', {zoomControl: false}).setView([22.965, 120.285], 13);
+
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
+
+// 起點標記
+L.circleMarker([ORIGIN.lat, ORIGIN.lng], {radius: 8, color: '#00d4ff', fillColor: '#00d4ff', fillOpacity: 0.8}).addTo(map)
+  .bindPopup(`<b>🏭 ${ORIGIN.name}</b><br>現勘出發起點`).openPopup();
+
+// 點位標記
+SITES.forEach(site => {
+  let marker = L.marker([site.lat, site.lng], {
+    icon: L.divIcon({
+      html: `<div style="background:#ff6b35; color:#fff; width:24px; height:24px; border-radius:50%; border:2px solid #fff; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700;">${site.num}</div>`,
+      className: '', iconSize: [24, 24], iconAnchor: [12, 12]
+    })
+  }).addTo(map);
+
+  marker.bindTooltip(site.mh, {permanent: true, direction: 'top', className: 'manhole-label', offset: [0, -12]});
+  
+  // 建立側邊欄卡片
+  const card = document.createElement('div');
+  card.className = 'site-card';
+  card.innerHTML = `
+    <div class="site-header">
+      <div class="site-num">${site.num}</div>
+      <div class="site-name">${site.name}</div>
+      <div class="drive-time">🚗 ${site.driveMin}min</div>
+    </div>
+    <div style="font-size:11px; color:var(--muted)">人孔：${site.mh}</div>
+    <div class="site-actions">
+      <a class="btn-nav" href="https://www.google.com/maps/dir/${ORIGIN.lat},${ORIGIN.lng}/${site.lat},${site.lng}" target="_blank">Google 導航</a>
+      <button class="btn-nav" style="background:var(--panel2); border:1px solid var(--accent); color:var(--accent);" onclick="map.flyTo([${site.lat}, ${site.lng}], 17)">定位</button>
+    </div>
+  `;
+  document.getElementById('sites-grid').appendChild(card);
+});
+
+function openNav(lat, lng) {
+  window.open(`https://www.google.com/maps/dir/?api=1&origin=${ORIGIN.lat},${ORIGIN.lng}&destination=${lat},${lng}&travelmode=driving`, '_blank');
+}
+</script>
+</body>
+</html>
