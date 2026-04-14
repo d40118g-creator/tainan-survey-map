@@ -1,584 +1,696 @@
-import { useState, useLayoutEffect, useRef, useCallback } from "react";
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>115年臺南市雨水下水道訪評 - 現勘地圖</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+:root{
+  --bg:#0a1628;
+  --panel:#0f2042;
+  --panel2:#162d55;
+  --accent:#00d4ff;
+  --accent2:#ff6b35;
+  --accent3:#4ade80;
+  --gold:#fbbf24;
+  --text:#e8f4fd;
+  --muted:#7ba7c4;
+  --border:#1e4080;
+  --radius:12px;
+  --shadow:0 4px 24px rgba(0,0,0,0.5);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-serif;min-height:100vh;overflow-x:hidden}
+/* Header */
+#header{
+  background:linear-gradient(135deg,#0a1628 0%,#0f2a55 50%,#0a1628 100%);
+  border-bottom:2px solid var(--accent);
+  padding:12px 16px;
+  display:flex;align-items:center;gap:12px;
+  box-shadow:0 2px 20px rgba(0,212,255,0.2);
+}
+#header h1{font-size:clamp(14px,3vw,18px);font-weight:700;color:#fff;line-height:1.3;flex:1}
+#header .sub{font-size:11px;color:var(--accent);margin-top:2px}
+.badge{background:var(--accent);color:#000;font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;white-space:nowrap}
 
-/* ════════════════════════════════════════
-正確座標：永康區仁愛街151號，北臨鹽水溪
-Google Maps 實際位置：23.047861, 120.240472
-════════════════════════════════════════ */
-const ORIGIN = { lat:23.047861, lng:120.240472, name:"永康水資源回收中心", color:"#00d4ff" };
-const HSR    = { lat:22.9501, lng:120.2894, name:"高鐵台南站",         color:"#fbbf24" };
+/* Main layout */
+#app{display:flex;flex-direction:column;height:calc(100vh - 56px)}
+#map{flex:1;min-height:300px;z-index:1}
+#sidebar{
+  background:var(--panel);
+  border-top:2px solid var(--border);
+  overflow-y:auto;
+  max-height:55vh;
+}
+
+@media(min-width:768px){
+  #app{flex-direction:row}
+  #map{flex:1}
+  #sidebar{max-height:none;width:360px;border-top:none;border-left:2px solid var(--border)}
+}
+
+/* Tabs */
+#tabs{display:flex;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--panel);z-index:10}
+.tab{
+  flex:1;padding:10px 8px;font-size:12px;font-weight:600;text-align:center;
+  cursor:pointer;transition:all .2s;border-bottom:3px solid transparent;
+  color:var(--muted);
+}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent);background:rgba(0,212,255,0.05)}
+
+/* Layer controls */
+#layers{padding:12px;border-bottom:1px solid var(--border)}
+#layers h3{font-size:11px;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px}
+.layer-row{display:flex;align-items:center;gap:8px;margin-bottom:6px;cursor:pointer}
+.layer-dot{width:14px;height:14px;border-radius:50%;flex-shrink:0}
+.toggle{
+  width:36px;height:20px;background:#1e4080;border-radius:10px;position:relative;
+  cursor:pointer;transition:.2s;margin-left:auto;
+}
+.toggle.on{background:var(--accent)}
+.toggle::after{
+  content:'';position:absolute;top:3px;left:3px;
+  width:14px;height:14px;background:#fff;border-radius:50%;transition:.2s;
+}
+.toggle.on::after{left:19px}
+
+/* Site cards */
+#sites-panel{padding:12px}
+.sites-grid{display:flex;flex-direction:column;gap:8px}
+.site-card{
+  background:var(--panel2);border:1px solid var(--border);border-radius:var(--radius);
+  padding:12px;cursor:pointer;transition:all .2s;position:relative;overflow:hidden;
+}
+.site-card::before{
+  content:'';position:absolute;left:0;top:0;bottom:0;width:4px;
+  background:var(--accent2);
+}
+.site-card:hover,.site-card.highlight{border-color:var(--accent);box-shadow:0 0 12px rgba(0,212,255,0.3)}
+.site-card.highlight{background:#0d2a5a}
+.site-num{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:24px;height:24px;border-radius:50%;background:var(--accent2);
+  font-size:12px;font-weight:700;color:#fff;flex-shrink:0;
+}
+.site-header{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.site-name{font-size:14px;font-weight:700;flex:1}
+.drive-time{
+  font-size:11px;font-weight:600;
+  background:rgba(251,191,36,0.15);color:var(--gold);
+  padding:2px 8px;border-radius:20px;
+  display:inline-flex;align-items:center;gap:4px;
+}
+.site-detail{font-size:11px;color:var(--muted);margin-bottom:4px}
+.manhole-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.manhole-tag{
+  font-family:'JetBrains Mono',monospace;font-size:10px;
+  background:rgba(0,212,255,0.1);color:var(--accent);
+  padding:2px 7px;border-radius:4px;
+}
+.site-actions{display:flex;gap:6px;margin-top:8px}
+.btn-small{
+  font-size:11px;padding:6px 10px;border:none;border-radius:6px;cursor:pointer;
+  font-weight:600;transition:.15s;
+}
+.btn-nav{background:var(--accent2);color:#fff}
+.btn-nav:hover{background:#ff8450}
+.btn-info{background:var(--accent);color:#000}
+.btn-info:hover{background:#33ddff}
+
+/* Detail panel */
+#detail-panel{
+  position:fixed;bottom:0;left:0;right:0;
+  background:var(--panel);border-top:2px solid var(--accent);
+  border-radius:16px 16px 0 0;
+  padding:16px;z-index:1001;
+  transform:translateY(100%);transition:.3s cubic-bezier(.4,0,.2,1);
+  max-height:80vh;overflow-y:auto;
+}
+#detail-panel.open{transform:translateY(0)}
+.detail-close{
+  position:absolute;top:12px;right:16px;
+  background:var(--border);color:var(--muted);
+  border:none;border-radius:50%;width:28px;height:28px;
+  font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;
+}
+.detail-title{font-size:16px;font-weight:700;margin-bottom:12px;padding-right:36px}
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.detail-item{background:var(--panel2);border-radius:8px;padding:8px}
+.detail-item label{font-size:10px;color:var(--muted);display:block;margin-bottom:2px}
+.detail-item span{font-size:13px;font-weight:600}
+.detail-section{margin-bottom:12px}
+.detail-section h4{font-size:12px;color:var(--accent);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
+.dimension-box{
+  background:rgba(0,212,255,0.07);border:1px solid rgba(0,212,255,0.2);
+  border-radius:8px;padding:10px;font-family:'JetBrains Mono',monospace;
+  font-size:13px;text-align:center;
+}
+
+/* Modal overlay */
+#modal-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:2000;
+  display:none;align-items:center;justify-content:center;padding:16px;
+}
+#modal-overlay.open{display:flex}
+.modal{
+  background:var(--panel);border:1px solid var(--accent);border-radius:16px;
+  padding:20px;max-width:440px;width:100%;position:relative;
+  max-height:90vh;overflow-y:auto;
+}
+.modal-close{
+  position:absolute;top:12px;right:12px;background:none;border:none;
+  color:var(--muted);font-size:20px;cursor:pointer;
+}
+.modal h2{font-size:18px;font-weight:700;margin-bottom:16px;color:var(--accent)}
+
+/* QR panel */
+#qr-panel{text-align:center}
+#qrcode{display:inline-block;background:#fff;padding:12px;border-radius:12px;margin:12px auto}
+.qr-url{
+  font-size:11px;word-break:break-all;color:var(--muted);
+  background:var(--panel2);padding:8px;border-radius:6px;margin-top:8px;
+}
+
+/* Legend */
+.legend-item{display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12px}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:var(--panel)}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+
+/* Intro */
+#intro{
+  position:fixed;inset:0;z-index:3000;
+  background:linear-gradient(135deg,#0a1628,#0f2a55);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:24px;transition:.5s;
+}
+#intro.hide{opacity:0;pointer-events:none}
+#intro h1{font-size:22px;font-weight:700;text-align:center;margin-bottom:8px;color:#fff}
+#intro p{color:var(--muted);text-align:center;font-size:13px;margin-bottom:24px}
+.intro-badge{
+  display:flex;align-items:center;gap:8px;
+  background:rgba(0,212,255,0.1);border:1px solid rgba(0,212,255,0.3);
+  border-radius:var(--radius);padding:12px 16px;margin-bottom:12px;width:100%;max-width:360px;
+}
+.intro-badge .icon{font-size:24px}
+.intro-badge .text{flex:1}
+.intro-badge .text b{display:block;font-size:13px;color:#fff}
+.intro-badge .text span{font-size:11px;color:var(--muted)}
+.start-btn{
+  margin-top:16px;background:var(--accent);color:#000;border:none;
+  border-radius:40px;padding:14px 40px;font-size:16px;font-weight:700;cursor:pointer;
+}
+</style>
+</head>
+<body>
+
+<div id="intro">
+  <div style="font-size:40px;margin-bottom:12px">🗺️</div>
+  <h1>115年臺南市雨水下水道<br>訪評現勘地圖</h1>
+  <p>歸仁區 5處建議現勘地點</p>
+  <div class="intro-badge">
+    <div class="icon">🏭</div>
+    <div class="text"><b>起點：永康水資源回收中心</b><span>Yongkang Water Resource Recovery Center</span></div>
+  </div>
+  <div class="intro-badge">
+    <div class="icon">🚄</div>
+    <div class="text"><b>高鐵台南站</b><span>HSR Tainan Station</span></div>
+  </div>
+  <div class="intro-badge">
+    <div class="icon">🔵</div>
+    <div class="text"><b>5處人孔現勘地點</b><span>選取2處進行實地現勘</span></div>
+  </div>
+  <button class="start-btn" onclick="hideIntro()">進入地圖 →</button>
+</div>
+
+<div id="header">
+  <div style="flex:1">
+    <h1>115年臺南市雨水下水道訪評</h1>
+    <div class="sub">歸仁區 5處現勘建議地點 — 選擇2處</div>
+  </div>
+  <span class="badge">115年度</span>
+</div>
+
+<div id="app">
+  <div id="map"></div>
+  <div id="sidebar">
+    <div id="tabs">
+      <div class="tab active" onclick="switchTab('sites')">📍 現勘地點</div>
+      <div class="tab" onclick="switchTab('layers')">🗂️ 圖層</div>
+      <div class="tab" onclick="switchTab('qr')">📱 QR碼</div>
+    </div>
+
+    <div id="tab-sites" class="tab-content">
+      <div id="sites-panel">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:10px;padding:4px 0;border-bottom:1px solid var(--border)">
+          ⚠️ 請委員從5處地點中選擇2處進行實地現勘<br>
+          <span style="color:var(--gold)">🚗 行車時間以永康水資源回收中心為起點</span>
+        </div>
+        <div class="sites-grid" id="sites-grid"></div>
+      </div>
+    </div>
+
+    <div id="tab-layers" class="tab-content" style="display:none">
+      <div id="layers">
+        <h3>圖層控制</h3>
+        <div class="layer-row" onclick="toggleLayer('sites')">
+          <div class="layer-dot" style="background:#ff6b35"></div>
+          <span style="font-size:13px">現勘地點（5處）</span>
+          <div class="toggle on" id="toggle-sites"></div>
+        </div>
+        <div class="layer-row" onclick="toggleLayer('facilities')">
+          <div class="layer-dot" style="background:#00d4ff"></div>
+          <span style="font-size:13px">重要設施（永康水資中心、高鐵站）</span>
+          <div class="toggle on" id="toggle-facilities"></div>
+        </div>
+        <div class="layer-row" onclick="toggleLayer('flooding')">
+          <div class="layer-dot" style="background:#ff4444"></div>
+          <span style="font-size:13px">歸仁區積淹水點（含100m範圍）</span>
+          <div class="toggle" id="toggle-flooding"></div>
+        </div>
+        <div class="layer-row" onclick="toggleLayer('manholes')">
+          <div class="layer-dot" style="background:#4ade80"></div>
+          <span style="font-size:13px">人孔調查位置</span>
+          <div class="toggle on" id="toggle-manholes"></div>
+        </div>
+      </div>
+      <div style="padding:12px">
+        <h3 style="font-size:11px;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px">圖例</h3>
+        <div class="legend-item"><div style="width:14px;height:14px;border-radius:50%;background:#00d4ff;flex-shrink:0"></div>永康水資源回收中心（起點）</div>
+        <div class="legend-item"><div style="width:14px;height:14px;border-radius:50%;background:#fbbf24;flex-shrink:0"></div>高鐵台南站</div>
+        <div class="legend-item"><div style="width:14px;height:14px;background:#ff6b35;border-radius:3px;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:9px;font-weight:700"></div>現勘建議地點（5處）</div>
+        <div class="legend-item"><div style="width:14px;height:14px;border-radius:50%;background:#4ade80;flex-shrink:0"></div>人孔調查點</div>
+        <div class="legend-item"><div style="width:14px;height:14px;border-radius:50%;background:rgba(255,68,68,0.5);border:2px dashed #ff4444;flex-shrink:0"></div>積淹水點（100m圓）</div>
+      </div>
+    </div>
+
+    <div id="tab-qr" class="tab-content" style="display:none">
+      <div id="qr-panel" style="padding:16px">
+        <div style="font-size:13px;margin-bottom:8px;font-weight:600">📱 手機掃描QR Code查閱本地圖</div>
+        <div id="qrcode"></div>
+        <div class="qr-url" id="qr-url-text"></div>
+        <div style="font-size:11px;color:var(--muted);margin-top:8px">
+          掃描後可在手機上完整查閱所有現勘地點資訊、人孔調查表及積淹水點資料。
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="detail-panel">
+  <button class="detail-close" onclick="closeDetail()">✕</button>
+  <div id="detail-content"></div>
+</div>
+
+<div id="modal-overlay" onclick="closeModal()">
+  <div class="modal" onclick="event.stopPropagation()">
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <div id="modal-content"></div>
+  </div>
+</div>
+
+<script>
+// ========= DATA =========
+// 使用您最新提供的永康水資中心正確座標
+const ORIGIN = {lat:23.0492, lng:120.2511, name:'永康水資源回收中心', label:'起點'};
+const HSR = {lat:22.9501, lng:120.2894, name:'高鐵台南站', label:'高鐵站'};
 
 const SITES = [
-{ id:1, name:"國光街61號前",
-addr:"臺南市歸仁區國光街61號左前方",
-lat:22.9683, lng:120.2900, driveMin:19,
-dim:"1.20×1.20m 單孔箱涵",
-desc:"人孔頂高程22.938m，調查日期106/02/05",
-manholes:[
-{ id:"14234-A48", lat:22.9683, lng:120.2900,
-survey:"106/02/05", depth:"1.220m", cover:"圓形 0.60m",
-topElev:"22.938m", dim:"1.20×1.20m",
-notes:"各方向均有淤積，爬梯現況良好，內壁良好",
-addr:"歸仁區國光街61號左前方" },
-],
-},
-{ id:2, name:"凱旋路二段路燈132號前",
-addr:"臺南市歸仁區凱旋路二段路燈編號132前",
-lat:22.9543, lng:120.2892, driveMin:21,
-dim:"2.00×2.00m 單孔箱涵",
-desc:"人孔頂高程20.599m，調查日期106/02/08",
-manholes:[
-{ id:"14232-F27", lat:22.9543, lng:120.2892,
-survey:"106/02/08", depth:"1.160m", cover:"圓形 0.55m",
-topElev:"20.599m", dim:"2.00×2.00m",
-notes:"孔蓋良好，路面平整，爬梯缺鐵鍊，內壁良好",
-addr:"歸仁區凱旋路二段路燈132前" },
-],
-},
-{ id:3, name:"民權九街16號前",
-addr:"臺南市歸仁區民權9街16號前",
-lat:22.9629, lng:120.2878, driveMin:19,
-dim:"1.20×1.20m 單孔箱涵",
-desc:"人孔頂高程22.893m，調查日期106/01/18",
-manholes:[
-{ id:"14233-A28", lat:22.9629, lng:120.2878,
-survey:"106/01/18", depth:"0.730m", cover:"圓形 0.60m",
-topElev:"22.893m", dim:"1.20×1.20m",
-notes:"孔蓋良好，路面平整，爬梯良好，內壁良好",
-addr:"歸仁區民權9街16號前" },
-],
-},
-{ id:4, name:"大順街與中山七街口",
-addr:"臺南市歸仁區大順街與中山七街口",
-lat:22.9651, lng:120.2832, driveMin:18,
-dim:"4.05×4.05m 單孔箱涵",
-desc:"人孔頂高程20.856m/20.024m，調查日期106/01/17",
-manholes:[
-{ id:"04234-A19", lat:22.9651, lng:120.2832,
-survey:"106/01/17", depth:"2.060m", cover:"圓形 0.60m",
-topElev:"20.856m", dim:"4.05×4.05m",
-notes:"無淤積，孔蓋良好，路面平整，爬梯良好",
-addr:"歸仁區大順街與中山七街口" },
-{ id:"04234-A20", lat:22.9653, lng:120.2815,
-survey:"106/01/17", depth:"1.750m", cover:"圓形 0.60m",
-topElev:"20.024m", dim:"4.10×2.45m",
-notes:"無淤積，孔蓋良好，路面平整，爬梯良好",
-addr:"歸仁區大順街326號右前方" },
-],
-},
-{ id:5, name:"大仁街395號前（大仁六街口）",
-addr:"臺南市歸仁區大仁街395號前",
-lat:22.9738, lng:120.2992, driveMin:22,
-dim:"1.20×1.20m 單孔箱涵",
-desc:"人孔頂高程25.488m/25.495m，調查日期106/01/19",
-manholes:[
-{ id:"24235-H3", lat:22.9739, lng:120.2992,
-survey:"106/01/19", depth:"0.640m", cover:"圓形 0.60m",
-topElev:"25.488m", dim:"1.50×1.50m",
-notes:"淤積20cm，水深20cm，爬梯現況良好",
-addr:"歸仁區大仁街395號前" },
-{ id:"24235-H2", lat:22.9737, lng:120.2988,
-survey:"106/01/19", depth:"0.640m", cover:"圓形 0.60m",
-topElev:"25.495m", dim:"1.20×1.20m",
-notes:"淤積20cm，水深20cm，爬梯現況良好",
-addr:"歸仁區大仁街323號前" },
-],
-},
+  {
+    id:1, num:1, district:'歸仁區',
+    name:'國光街61號前', address:'臺南市歸仁區國光街61號左前方',
+    lat:22.9683, lng:120.2899, driveMin:19,
+    manholes:['14234-A48','14234-A49'],
+    dimension:'1.20×1.20 單孔箱涵',
+    coords:'22°58\'06.0"N 120°17\'23.7"E',
+    depth:'1.220m',
+    coverType:'圓形 (0.60m)',
+    surveyDate:'106/02/05',
+    description:'各方向均有淤積，爬梯現況良好，內壁良好',
+    pdfs:['14234_a48_Extract_49_206_364_.pdf'],
+    siltDepth:'10cm', waterDepth:'10cm',
+    highlight: '箱涵淤積需清淤'
+  },
+  {
+    id:2, num:2, district:'歸仁區',
+    name:'凱旋路二段路燈132號前', address:'臺南市歸仁區凱旋路二段路燈編號132前',
+    lat:22.9543, lng:120.2892, driveMin:21,
+    manholes:['14232-F27','14232-F28'],
+    dimension:'2.00×2.00 單孔箱涵',
+    coords:'22°57\'15.2"N 120°17\'21.7"E',
+    depth:'1.160m',
+    coverType:'圓形 (0.55m)',
+    surveyDate:'106/02/08',
+    description:'孔蓋良好，路面平整，爬梯缺鐵鍊，內壁良好',
+    pdfs:['14232_F27__Extract_114_270_429_594_.pdf'],
+    siltDepth:'0cm', waterDepth:'0cm',
+    highlight: '大斷面箱涵，結構完好'
+  },
+  {
+    id:3, num:3, district:'歸仁區',
+    name:'民權九街16號前', address:'臺南市歸仁區民權9街16號前',
+    lat:22.9629, lng:120.2878, driveMin:19,
+    manholes:['14233-A28','14233-A27'],
+    dimension:'1.20×1.20 單孔箱涵',
+    coords:'22°57\'46.4"N 120°17\'17.6"E',
+    depth:'0.730m',
+    coverType:'圓形 (0.60m)',
+    surveyDate:'106/01/18',
+    description:'孔蓋良好，路面平整，爬梯良好，內壁良好',
+    pdfs:['14233_A28_Extract_29_188_344_503_.pdf'],
+    siltDepth:'0cm', waterDepth:'0cm',
+    highlight: '淺埋型人孔，狀況良好'
+  },
+  {
+    id:4, num:4, district:'歸仁區',
+    name:'大順街與中山七街口', address:'臺南市歸仁區大順街與中山七街口',
+    lat:22.9651, lng:120.2832, driveMin:18,
+    manholes:['04234-A19','04234-A20'],
+    dimension:'4.05×4.05 單孔箱涵',
+    coords:'22°57\'54.6"N 120°16\'58.6"E',
+    depth:'2.060m / 1.750m',
+    coverType:'圓形 (0.60m)',
+    surveyDate:'106/01/17',
+    description:'無淤積，孔蓋良好，路面平整，爬梯良好',
+    pdfs:['04234-A19_Extract_20_179_335_494_.pdf','04234-A20.pdf'],
+    siltDepth:'0cm', waterDepth:'0cm',
+    highlight: '最近距離18分，大型箱涵4.05m'
+  },
+  {
+    id:5, num:5, district:'歸仁區',
+    name:'大仁街395號前（大仁六街口）', address:'臺南市歸仁區大仁街395號前',
+    lat:22.9738, lng:120.2991, driveMin:22,
+    manholes:['24235-H3','24235-H2'],
+    dimension:'1.20×1.20 單孔箱涵',
+    coords:'22°58\'25.5"N 120°17\'56.1"E',
+    depth:'0.640m',
+    coverType:'圓形 (0.60m)',
+    surveyDate:'106/01/19',
+    description:'淤積20cm，水深20cm，爬梯現況良好',
+    pdfs:['24235-H3_Extract_120_276_435_.pdf','24235-H2_Extract_119_275_434_.pdf'],
+    siltDepth:'20cm', waterDepth:'20cm',
+    highlight: '⚠️ 淤積20cm，需優先清淤'
+  }
+];
+
+const MANHOLES = [
+  {id:'24235-H2', lat:22.9737, lng:120.2988, area:'歸仁區大仁街323號前', depth:0.640},
+  {id:'24235-H3', lat:22.9739, lng:120.2992, area:'歸仁區大仁街395號前', depth:0.640},
+  {id:'04234-A19', lat:22.9651, lng:120.2832, area:'歸仁區大順街與中山七街口', depth:2.060},
+  {id:'04234-A20', lat:22.9653, lng:120.2815, area:'歸仁區大順街326號右前方', depth:1.750},
+  {id:'14232-F27', lat:22.9543, lng:120.2892, area:'歸仁區凱旋路二段路燈132前', depth:1.160},
+  {id:'14233-A28', lat:22.9629, lng:120.2878, area:'歸仁區民權9街16號前', depth:0.730},
+  {id:'14234-A48', lat:22.9683, lng:120.2900, area:'歸仁區國光街61號左前方', depth:1.220},
 ];
 
 const FLOODING = [
-{ name:"八甲中排沿路道路",     lat:22.9916, lng:120.2865 },
-{ name:"中山路及民權南北路口", lat:22.9675, lng:120.2879 },
-{ name:"民生九街",             lat:22.9612, lng:120.2804 },
-{ name:"民生十一街",           lat:22.9574, lng:120.2806 },
-{ name:"六甲路與台39線路口",   lat:22.9530, lng:120.2735 },
-{ name:"南興里中山11街25號",   lat:22.9680, lng:120.2763 },
-{ name:"大潭二街30巷",         lat:22.9118, lng:120.2688 },
-{ name:"中山路一段30巷周邊",   lat:22.9632, lng:120.3133 },
+  {name:'八甲中排沿路道路', lat:22.991566, lng:120.286547},
+  {name:'歸仁區中山路及民權南北路口', lat:22.967458, lng:120.287869},
+  {name:'民生九街', lat:22.961172, lng:120.280446},
+  {name:'民生十一街', lat:22.957357, lng:120.280582},
+  {name:'歸仁區六甲路與台39線路口', lat:22.952978, lng:120.273472},
+  {name:'歸仁區南興里中山11街25號', lat:22.967991, lng:120.276334},
+  {name:'大潭二街30巷', lat:22.911832, lng:120.268809},
+  {name:'歸仁區中山路一段30巷周邊', lat:22.963175, lng:120.313280},
 ];
 
-// All key points for bounding box
-const KEY_LATS = [ORIGIN.lat, HSR.lat, ...SITES.map(s=>s.lat)];
-const KEY_LNGS = [ORIGIN.lng, HSR.lng, ...SITES.map(s=>s.lng)];
-const BB = {
-minLat: Math.min(...KEY_LATS),
-maxLat: Math.max(...KEY_LATS),
-minLng: Math.min(...KEY_LNGS),
-maxLng: Math.max(...KEY_LNGS),
-};
-const MID = { lat:(BB.minLat+BB.maxLat)/2, lng:(BB.minLng+BB.maxLng)/2 };
-const SPAN = { lat: BB.maxLat-BB.minLat, lng: BB.maxLng-BB.minLng };
+// ========= MAP =========
+let map, layerGroups = {}, activeTab = 'sites';
+let selectedSite = null;
 
-/* ════════════════════════════════════════
-CANVAS MAP
-════════════════════════════════════════ */
-function CanvasMap({ selectedId, onSiteClick, onManholeClick,
-showFl, showFac, showMH, showSites, resetTick }) {
-const wrapRef  = useRef();
-const canvasRef= useRef();
-const view     = useRef({ cx: MID.lng, cy: MID.lat, scale: 1 });
-const drag     = useRef(null);
-const pinch    = useRef(null);
-const raf      = useRef(null);
-const ready    = useRef(false);
-
-// project lat/lng → pixel
-function px(lat, lng) {
-const c = canvasRef.current;
-if (!c) return {x:0,y:0};
-const { cx, cy, scale } = view.current;
-return {
-x: (lng - cx) * scale + c.width  / 2,
-y: -(lat - cy) * scale + c.height / 2,
-};
-}
-
-function fitToAll(w, h) {
-const pad = 0.72;
-const s = Math.min((h * pad) / SPAN.lat, (w * pad) / SPAN.lng);
-view.current = { cx: MID.lng, cy: MID.lat, scale: s };
-}
-
-/* ── draw ── */
-const drawAll = useCallback(() => {
-const canvas = canvasRef.current;
-if (!canvas || !canvas.width || !canvas.height) return;
-const ctx = canvas.getContext("2d");
-const W = canvas.width, H = canvas.height;
-const { scale } = view.current;
-
-/* background */
-const bg = ctx.createLinearGradient(0,0,0,H);
-bg.addColorStop(0,"#0d1b38"); bg.addColorStop(1,"#080f1e");
-ctx.fillStyle = bg; ctx.fillRect(0,0,W,H);
-
-/* grid */
-ctx.strokeStyle = "rgba(30,64,128,0.4)"; ctx.lineWidth = 1;
-const gd = scale>8000?.002 : scale>4000?.005 : scale>1500?.01 : .02;
-const { cx, cy } = view.current;
-for (let lng=Math.ceil((cx-W/2/scale)/gd)*gd; lng<cx+W/2/scale; lng+=gd) {
-  const x=px(0,lng).x; ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke();
-}
-for (let lat=Math.ceil((cy-H/2/scale)/gd)*gd; lat<cy+H/2/scale; lat+=gd) {
-  const y=px(lat,0).y; ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke();
-}
-
-/* flooding */
-if (showFl) {
-  FLOODING.forEach(f => {
-    const p = px(f.lat,f.lng);
-    const r = Math.max(6, .0009*scale);
-    ctx.beginPath(); ctx.arc(p.x,p.y,r,0,Math.PI*2);
-    ctx.fillStyle="rgba(255,60,60,.12)"; ctx.fill();
-    ctx.strokeStyle="#ff4444"; ctx.lineWidth=1.5;
-    ctx.setLineDash([4,3]); ctx.stroke(); ctx.setLineDash([]);
-    ctx.beginPath(); ctx.arc(p.x,p.y,4,0,Math.PI*2);
-    ctx.fillStyle="#ff5555"; ctx.fill();
-    if (scale>4000) {
-      ctx.fillStyle="rgba(255,130,130,.9)"; ctx.font="9px sans-serif";
-      ctx.textAlign="left"; ctx.shadowColor="#000"; ctx.shadowBlur=3;
-      ctx.fillText(f.name,p.x+7,p.y+3); ctx.shadowBlur=0;
-    }
+function initMap(){
+  map = L.map('map',{
+    center:[22.9700, 120.2870],
+    zoom:13,
+    zoomControl:true,
   });
+
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
+    attribution:'© OpenStreetMap contributors © CARTO',
+    subdomains:'abcd', maxZoom:19
+  }).addTo(map);
+
+  layerGroups.facilities = L.layerGroup().addTo(map);
+  layerGroups.sites = L.layerGroup().addTo(map);
+  layerGroups.manholes = L.layerGroup().addTo(map);
+  layerGroups.flooding = L.layerGroup(); 
+
+  addFacilities();
+  addSiteMarkers();
+  addManholeMarkers();
+  addFloodingPoints();
+
+  setTimeout(()=>{
+    const bounds = L.latLngBounds([
+      [HSR.lat, HSR.lng],[ORIGIN.lat, ORIGIN.lng],
+      ...SITES.map(s=>[s.lat,s.lng])
+    ]);
+    map.fitBounds(bounds, {padding:[30,30]});
+  }, 300);
 }
 
-/* manholes */
-if (showMH) {
-  SITES.forEach(site=>site.manholes.forEach(mh=>{
-    const p=px(mh.lat,mh.lng);
-    ctx.beginPath(); ctx.arc(p.x,p.y,5,0,Math.PI*2);
-    ctx.fillStyle="#4ade80"; ctx.fill();
-    ctx.strokeStyle="#fff"; ctx.lineWidth=1.5; ctx.stroke();
-    if (scale>6000) {
-      ctx.fillStyle="#4ade80"; ctx.font="9px monospace";
-      ctx.textAlign="left"; ctx.shadowColor="#000"; ctx.shadowBlur=3;
-      ctx.fillText(mh.id,p.x+8,p.y+3); ctx.shadowBlur=0;
-    }
-  }));
-}
-
-/* facilities */
-if (showFac) {
-  [ORIGIN,HSR].forEach(f=>{
-    const p=px(f.lat,f.lng);
-    if (p.x<-30||p.x>W+30||p.y<-30||p.y>H+30) return;
-    const g=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,22);
-    g.addColorStop(0,f.color+"66"); g.addColorStop(1,"transparent");
-    ctx.beginPath(); ctx.arc(p.x,p.y,22,0,Math.PI*2); ctx.fillStyle=g; ctx.fill();
-    ctx.beginPath(); ctx.arc(p.x,p.y,11,0,Math.PI*2);
-    ctx.fillStyle=f.color; ctx.fill();
-    ctx.strokeStyle="#fff"; ctx.lineWidth=2.5; ctx.stroke();
-    ctx.fillStyle="#fff"; ctx.font="bold 11px sans-serif";
-    ctx.textAlign="left"; ctx.shadowColor="#000"; ctx.shadowBlur=5;
-    ctx.fillText(f.name,p.x+15,p.y+4); ctx.shadowBlur=0;
+function addFacilities(){
+  const originIcon = L.divIcon({
+    html:`<div style="background:#00d4ff;width:18px;height:18px;border-radius:50%;border:3px solid #fff;box-shadow:0 0 12px rgba(0,212,255,0.8)"></div>`,
+    iconSize:[18,18], iconAnchor:[9,9], className:''
   });
+  L.marker([ORIGIN.lat, ORIGIN.lng], {icon:originIcon})
+    .bindPopup(`<b style="color:#00d4ff">🏭 ${ORIGIN.name}</b><br><span style="color:#666">訪評行程起點</span><br><small>座標: ${ORIGIN.lat.toFixed(4)}, ${ORIGIN.lng.toFixed(4)}</small>`)
+    .addTo(layerGroups.facilities);
+
+  L.marker([ORIGIN.lat+0.004, ORIGIN.lng], {
+    icon: L.divIcon({
+      html:`<div style="background:rgba(0,212,255,0.9);color:#000;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;white-space:nowrap">永康水資中心（起點）</div>`,
+      className:'', iconAnchor:[60,0]
+    })
+  }).addTo(layerGroups.facilities);
+
+  const hsrIcon = L.divIcon({
+    html:`<div style="background:#fbbf24;width:18px;height:18px;border-radius:50%;border:3px solid #fff;box-shadow:0 0 12px rgba(251,191,36,0.8)"></div>`,
+    iconSize:[18,18], iconAnchor:[9,9], className:''
+  });
+  L.marker([HSR.lat, HSR.lng], {icon:hsrIcon})
+    .bindPopup(`<b style="color:#fbbf24">🚄 ${HSR.name}</b><br><small>高速鐵路台南站</small>`)
+    .addTo(layerGroups.facilities);
+  
+  L.marker([HSR.lat+0.003, HSR.lng], {
+    icon: L.divIcon({
+      html:`<div style="background:rgba(251,191,36,0.9);color:#000;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;white-space:nowrap">高鐵台南站</div>`,
+      className:'', iconAnchor:[36,0]
+    })
+  }).addTo(layerGroups.facilities);
 }
 
-/* sites */
-if (showSites) {
+function addSiteMarkers(){
   SITES.forEach(site=>{
-    const p=px(site.lat,site.lng);
-    if (p.x<-30||p.x>W+30||p.y<-30||p.y>H+30) return;
-    const sel=site.id===selectedId, r=sel?20:15;
-    if (sel) {
-      [r+10,r+5].forEach((rr,i)=>{
-        ctx.beginPath(); ctx.arc(p.x,p.y,rr,0,Math.PI*2);
-        ctx.strokeStyle=`rgba(0,212,255,${i?0.6:0.3})`; ctx.lineWidth=1.5; ctx.stroke();
-      });
-    }
-    ctx.shadowColor="rgba(255,107,53,.8)"; ctx.shadowBlur=sel?18:10;
-    ctx.beginPath(); ctx.arc(p.x,p.y,r,0,Math.PI*2);
-    ctx.fillStyle=sel?"#fff":"#ff6b35"; ctx.fill();
-    ctx.strokeStyle="#fff"; ctx.lineWidth=2.5; ctx.stroke();
-    ctx.shadowBlur=0;
-    ctx.fillStyle=sel?"#ff6b35":"#fff";
-    ctx.font=`bold ${sel?14:12}px sans-serif`;
-    ctx.textAlign="center"; ctx.textBaseline="middle";
-    ctx.fillText(String(site.id),p.x,p.y);
-    ctx.textBaseline="alphabetic";
-    if (scale>4500||sel) {
-      ctx.fillStyle="rgba(235,248,255,.95)"; ctx.font="10px sans-serif";
-      ctx.textAlign="center"; ctx.shadowColor="#000"; ctx.shadowBlur=4;
-      ctx.fillText(site.name,p.x,p.y+r+13); ctx.shadowBlur=0;
-    }
+    const icon = L.divIcon({
+      html:`<div style="
+        background:#ff6b35;color:#fff;width:28px;height:28px;
+        border-radius:50%;border:2.5px solid #fff;
+        display:flex;align-items:center;justify-content:center;
+        font-size:13px;font-weight:700;
+        box-shadow:0 0 10px rgba(255,107,53,0.7);
+      ">${site.num}</div>`,
+      iconSize:[28,28], iconAnchor:[14,14], className:''
+    });
+
+    const m = L.marker([site.lat, site.lng], {icon})
+      .bindPopup(`
+        <b style="color:#ff6b35">地點 ${site.num}：${site.name}</b><br>
+        <small>🚗 ${site.driveMin} 分鐘 | ${site.dimension}</small><br>
+        <small style="color:#888">${site.manholes.join('、')}</small>
+      `)
+      .addTo(layerGroups.sites);
+
+    m.on('click', ()=> showSiteDetail(site));
+    site._marker = m;
   });
 }
 
-/* compass + scale */
-ctx.fillStyle="rgba(0,212,255,.85)"; ctx.font="bold 12px sans-serif";
-ctx.textAlign="right"; ctx.fillText("N ↑",W-10,22);
-const px1km=(1000/111000)*scale;
-if (px1km>15&&px1km<W*.4) {
-  const bx=14,by=H-14;
-  ctx.strokeStyle="#00d4ff"; ctx.lineWidth=2;
-  ctx.beginPath(); ctx.moveTo(bx,by); ctx.lineTo(bx+px1km,by); ctx.stroke();
-  [bx,bx+px1km].forEach(x=>{ctx.beginPath();ctx.moveTo(x,by-4);ctx.lineTo(x,by+4);ctx.stroke();});
-  ctx.fillStyle="#00d4ff"; ctx.font="10px sans-serif";
-  ctx.textAlign="center"; ctx.fillText("1 km",bx+px1km/2,by-7);
-}
-ctx.fillStyle="rgba(80,120,180,.5)"; ctx.font="9px sans-serif";
-ctx.textAlign="left"; ctx.fillText("座標示意圖（非精確底圖）",8,H-6);
-}, [selectedId, showFl, showFac, showMH, showSites]);
-
-/* ── measure wrapper and set canvas size on mount / resize ── */
-useLayoutEffect(() => {
-const wrap = wrapRef.current;
-if (!wrap) return;
-function measure() {
-const W = wrap.clientWidth;
-const H = wrap.clientHeight;
-if (!W || !H) return;
-const canvas = canvasRef.current;
-canvas.width  = W;
-canvas.height = H;
-if (!ready.current) { fitToAll(W,H); ready.current=true; }
-drawAll();
-}
-measure();
-const ro = new ResizeObserver(measure);
-ro.observe(wrap);
-return () => ro.disconnect();
-}, [drawAll]);
-
-/* redraw on data changes after first draw */
-useLayoutEffect(() => { if (ready.current) drawAll(); }, [drawAll]);
-
-/* reset view */
-useLayoutEffect(() => {
-if (!ready.current) return;
-const c = canvasRef.current;
-fitToAll(c.width, c.height);
-drawAll();
-}, [resetTick, drawAll]);
-
-/* schedule draw */
-function sched() {
-if (raf.current) return;
-raf.current = requestAnimationFrame(()=>{ raf.current=null; drawAll(); });
+function addManholeMarkers(){
+  MANHOLES.forEach(mh=>{
+    const icon = L.divIcon({
+      html:`<div style="background:#4ade80;width:10px;height:10px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 6px rgba(74,222,128,0.7)"></div>`,
+      iconSize:[10,10], iconAnchor:[5,5], className:''
+    });
+    L.marker([mh.lat, mh.lng], {icon})
+      .bindPopup(`<b style="color:#4ade80">人孔 ${mh.id}</b><br>${mh.area}<br>深度: ${mh.depth}m`)
+      .addTo(layerGroups.manholes);
+  });
 }
 
-/* pointer helpers */
-function getPts(e) {
-const c = canvasRef.current;
-const r = c.getBoundingClientRect();
-const sx=c.width/r.width, sy=c.height/r.height;
-if (e.touches) return Array.from(e.touches).map(t=>({x:(t.clientX-r.left)*sx,y:(t.clientY-r.top)*sy}));
-return [{x:(e.clientX-r.left)*sx,y:(e.clientY-r.top)*sy}];
+function addFloodingPoints(){
+  FLOODING.forEach(fp=>{
+    L.circle([fp.lat, fp.lng], {
+      radius: 100, color: '#ff4444', fillColor: '#ff4444', fillOpacity: 0.12, weight: 2, dashArray: '6 4'
+    }).bindPopup(`<b style="color:#ff4444">🌊 積淹水點</b><br>${fp.name}<br><small>範圍：100公尺</small>`)
+      .addTo(layerGroups.flooding);
+
+    L.circleMarker([fp.lat, fp.lng], {
+      radius: 5, color:'#ff4444', fillColor:'#ff4444', fillOpacity:0.9, weight:2
+    }).addTo(layerGroups.flooding);
+  });
 }
 
-function onDown(e) {
-e.preventDefault();
-const pts=getPts(e);
-if (pts.length===1) { drag.current={sx:pts[0].x,sy:pts[0].y,cx:view.current.cx,cy:view.current.cy,moved:false}; pinch.current=null; }
-else { pinch.current={dist:Math.hypot(pts[1].x-pts[0].x,pts[1].y-pts[0].y),scale:view.current.scale}; drag.current=null; }
-}
-function onMove(e) {
-e.preventDefault();
-const pts=getPts(e);
-if (pts.length>=2&&pinch.current) {
-const d=Math.hypot(pts[1].x-pts[0].x,pts[1].y-pts[0].y);
-view.current.scale=Math.max(400,Math.min(50000,pinch.current.scale*d/pinch.current.dist));
-sched();
-} else if (pts.length===1&&drag.current) {
-const dx=pts[0].x-drag.current.sx,dy=pts[0].y-drag.current.sy;
-if (Math.abs(dx)+Math.abs(dy)>4) drag.current.moved=true;
-if (drag.current.moved) {
-view.current.cx=drag.current.cx-dx/view.current.scale;
-view.current.cy=drag.current.cy+dy/view.current.scale;
-sched();
-}
-}
-}
-function onUp(e) {
-const wasMoved=drag.current?.moved;
-if (!wasMoved&&drag.current) {
-const r=canvasRef.current.getBoundingClientRect();
-const c=canvasRef.current;
-const sx=c.width/r.width,sy=c.height/r.height;
-let cx,cy;
-if (e.changedTouches?.length) { cx=(e.changedTouches[0].clientX-r.left)*sx; cy=(e.changedTouches[0].clientY-r.top)*sy; }
-else { cx=(e.clientX-r.left)*sx; cy=(e.clientY-r.top)*sy; }
-tap(cx,cy);
-}
-drag.current=null; pinch.current=null;
-}
-function tap(cx,cy) {
-if (showMH) for (const s of SITES) for (const mh of s.manholes) {
-const p=px(mh.lat,mh.lng); if (Math.hypot(cx-p.x,cy-p.y)<13){onManholeClick(mh);return;}
-}
-if (showSites) for (const s of SITES) {
-const p=px(s.lat,s.lng); if (Math.hypot(cx-p.x,cy-p.y)<22){onSiteClick(s.id);return;}
-}
-onSiteClick(null);
-}
-function onWheel(e) {
-e.preventDefault();
-view.current.scale=Math.max(400,Math.min(50000,view.current.scale*(e.deltaY>0?.85:1.18)));
-sched();
+function toggleLayer(layer){
+  const toggle = document.getElementById('toggle-'+layer);
+  if(map.hasLayer(layerGroups[layer])){
+    map.removeLayer(layerGroups[layer]);
+    toggle.classList.remove('on');
+  } else {
+    map.addLayer(layerGroups[layer]);
+    toggle.classList.add('on');
+  }
 }
 
-return (
-<div ref={wrapRef} style={{width:"100%",height:"100%",position:"relative"}}>
-<canvas ref={canvasRef} style={{display:"block",touchAction:"none",cursor:"grab"}}
-onMouseDown={onDown} onMouseMove={onMove} onMouseUp={onUp} onMouseLeave={onUp}
-onTouchStart={onDown} onTouchMove={onMove} onTouchEnd={onUp} onWheel={onWheel}/>
-</div>
-);
+// ========= SIDEBAR =========
+function buildSiteCards(){
+  const grid = document.getElementById('sites-grid');
+  grid.innerHTML = '';
+  SITES.forEach(site=>{
+    const card = document.createElement('div');
+    card.className = 'site-card';
+    card.id = 'card-'+site.id;
+
+    const siltBadge = parseInt(site.siltDepth) > 0 
+      ? `<span style="background:rgba(255,107,53,0.2);color:#ff6b35;font-size:10px;padding:2px 6px;border-radius:4px">⚠️ 淤積${site.siltDepth}</span>` 
+      : '<span style="background:rgba(74,222,128,0.2);color:#4ade80;font-size:10px;padding:2px 6px;border-radius:4px">✓ 無淤積</span>';
+
+    card.innerHTML = `
+      <div class="site-header">
+        <div class="site-num">${site.num}</div>
+        <div class="site-name">${site.name}</div>
+        <div class="drive-time">🚗 ${site.driveMin}min</div>
+      </div>
+      <div class="site-detail">📐 ${site.dimension}</div>
+      <div class="site-detail">📍 ${site.district} ${site.address.replace('臺南市歸仁區','')}</div>
+      <div style="display:flex;gap:4px;align-items:center;margin:4px 0">${siltBadge}</div>
+      <div class="manhole-tags">${site.manholes.map(m=>`<span class="manhole-tag">${m}</span>`).join('')}</div>
+      <div class="site-actions">
+        <button class="btn-small btn-info" onclick="showSiteDetail(SITES[${site.id-1}]);event.stopPropagation()">📋 調查表</button>
+        <button class="btn-small btn-nav" onclick="flyToSite(SITES[${site.id-1}]);event.stopPropagation()">🗺️ 地圖定位</button>
+        <button class="btn-small" style="background:#1e4080;color:#fff" onclick="openGoogleMaps(SITES[${site.id-1}]);event.stopPropagation()">🧭 導航</button>
+      </div>
+    `;
+    card.addEventListener('click', ()=>{flyToSite(site);showSiteDetail(site)});
+    grid.appendChild(card);
+  });
 }
 
-/* ════════════════════════════════════════
-MANHOLE MODAL
-════════════════════════════════════════ */
-function MH({ mh, onClose }) {
-if (!mh) return null;
-return (
-<div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.75)",zIndex:9999,display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
-<div onClick={e=>e.stopPropagation()} style={{background:"#0f2042",border:"1.5px solid #00d4ff",borderRadius:"20px 20px 0 0",padding:"20px 18px 36px",width:"100%",maxWidth:520,maxHeight:"84vh",overflowY:"auto",boxShadow:"0 -8px 40px rgba(0,212,255,.25)"}}>
-<div style={{width:40,height:4,background:"#1e4080",borderRadius:2,margin:"0 auto 16px"}}/>
-<div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
-<div style={{background:"#4ade80",width:38,height:38,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>🕳️</div>
-<div style={{flex:1}}>
-<div style={{fontSize:15,fontWeight:700,color:"#fff"}}>雨水下水道人孔調查及維護紀錄表</div>
-<div style={{fontSize:12,color:"#00d4ff",fontFamily:"monospace",marginTop:2}}>{mh.id}</div>
-</div>
-<button onClick={onClose} style={{background:"#1e4080",border:"none",color:"#7ba7c4",borderRadius:"50%",width:32,height:32,fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>✕</button>
-</div>
-<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
-{[["縣市","台南市"],["鄉鎮區","歸仁區"],["人孔編號",mh.id],["調查日期",mh.survey],["人孔頂高程",mh.topElev],["人孔深度",mh.depth],["孔蓋形式",mh.cover],["斷面尺寸",mh.dim]].map(([k,v])=>(
-<div key={k} style={{background:"#162d55",borderRadius:8,padding:"8px 10px"}}>
-<div style={{fontSize:10,color:"#7ba7c4",marginBottom:2}}>{k}</div>
-<div style={{fontSize:13,fontWeight:600,color:"#e8f4fd",fontFamily:k==="人孔編號"?"monospace":"inherit"}}>{v}</div>
-</div>
-))}
-</div>
-<div style={{background:"#162d55",borderRadius:8,padding:"8px 10px",marginBottom:10}}>
-<div style={{fontSize:10,color:"#7ba7c4",marginBottom:2}}>鄰近地址</div>
-<div style={{fontSize:13,color:"#e8f4fd"}}>臺南市{mh.addr}</div>
-</div>
-<div style={{background:"rgba(0,212,255,.08)",border:"1px solid rgba(0,212,255,.2)",borderRadius:8,padding:"10px 12px",marginBottom:14}}>
-<div style={{fontSize:10,color:"#00d4ff",marginBottom:5,textTransform:"uppercase",letterSpacing:1}}>調查說明／維護狀況</div>
-<div style={{fontSize:13,color:"#e8f4fd",lineHeight:1.75}}>{mh.notes}</div>
-</div>
-<button onClick={()=>window.open(`https://www.google.com/maps/dir/$${ORIGIN.lat},${ORIGIN.lng}/${mh.lat},${mh.lng}`,"_blank")}
-style={{width:"100%",background:"#ff6b35",color:"#fff",border:"none",borderRadius:10,padding:"13px 0",fontSize:14,fontWeight:700,cursor:"pointer",marginBottom:8}}>
-🧭 Google Maps 導航至此人孔
-</button>
-<button onClick={onClose} style={{width:"100%",background:"transparent",color:"#7ba7c4",border:"1px solid #1e4080",borderRadius:10,padding:"10px 0",fontSize:13,cursor:"pointer"}}>關閉</button>
-</div>
-</div>
-);
+function flyToSite(site){
+  map.flyTo([site.lat, site.lng], 17, {duration:1.5});
+  site._marker && site._marker.openPopup();
+  document.querySelectorAll('.site-card').forEach(c=>c.classList.remove('highlight'));
+  const card = document.getElementById('card-'+site.id);
+  if(card){card.classList.add('highlight'); card.scrollIntoView({behavior:'smooth',block:'nearest'})}
 }
 
-/* ════════════════════════════════════════
-QR GUIDE
-════════════════════════════════════════ */
-function QRGuide() {
-const [copied,setCopied]=useState(false);
-const url=typeof window!=="undefined"?window.location.href:"";
-return (
-<div style={{padding:"14px 14px 24px"}}>
-<div style={{fontSize:14,fontWeight:700,color:"#fff",marginBottom:4}}>📱 QR Code 使用說明</div>
-<div style={{fontSize:11,color:"#7ba7c4",marginBottom:14,lineHeight:1.65,background:"rgba(255,107,53,.08)",border:"1px solid rgba(255,107,53,.25)",borderRadius:8,padding:"10px 12px"}}>
-⚠️ Claude.ai 每次產生的網址不固定，QR Code 無法直接使用。請依下列步驟部署後即可讓委員掃碼使用。
-</div>
-{[
-{n:"1",t:"下載 HTML 檔",d:"在此 Artifact 右上角點「⋯」→「下載」，存成 .html 檔"},
-{n:"2",t:"上傳到 Netlify（免費，2分鐘）",d:"開啟 netlify.com/drop，把 .html 拖曳到頁面，取得固定網址（如 abc123.netlify.app）"},
-{n:"3",t:"生成 QR Code",d:"到 qr-code-generator.com，貼上網址，下載 QR Code 圖片"},
-{n:"4",t:"委員掃描使用",d:"掃描後即可在手機完整使用地圖縮放、人孔調查表等所有功能"},
-].map(s=>(
-<div key={s.n} style={{display:"flex",gap:12,marginBottom:14}}>
-<div style={{background:"#00d4ff",color:"#000",width:26,height:26,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,flexShrink:0,marginTop:1}}>{s.n}</div>
-<div>
-<div style={{fontSize:13,fontWeight:700,color:"#e8f4fd",marginBottom:3}}>{s.t}</div>
-<div style={{fontSize:12,color:"#9ab3cc",lineHeight:1.6}}>{s.d}</div>
-</div>
-</div>
-))}
-<div style={{background:"rgba(251,191,36,.1)",border:"1px solid rgba(251,191,36,.3)",borderRadius:10,padding:"12px 14px",marginBottom:12}}>
-<div style={{fontSize:12,color:"#fbbf24",fontWeight:700,marginBottom:6}}>⚡ 目前連結（供測試/分享）</div>
-<div style={{fontSize:10,wordBreak:"break-all",color:"#c8b460",fontFamily:"monospace",lineHeight:1.5,marginBottom:8}}>{url}</div>
-<button onClick={()=>{navigator.clipboard?.writeText(url).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),2000);});}}
-style={{width:"100%",background:copied?"#4ade80":"#1e4080",color:copied?"#000":"#00d4ff",border:"none",borderRadius:6,padding:"8px 0",fontSize:12,fontWeight:700,cursor:"pointer",transition:".2s"}}>
-{copied?"✓ 已複製！":"📋 複製連結"}
-</button>
-</div>
-</div>
-);
-}
+function showSiteDetail(site){
+  const panel = document.getElementById('detail-panel');
+  const content = document.getElementById('detail-content');
+  const siltWarning = parseInt(site.siltDepth) > 0 
+    ? `<div style="background:rgba(255,107,53,0.15);border:1px solid rgba(255,107,53,0.4);border-radius:8px;padding:10px;margin-bottom:12px;font-size:12px">
+        ⚠️ <b>注意：</b>${site.highlight}
+       </div>` : '';
 
-/* ════════════════════════════════════════
-MAIN
-════════════════════════════════════════ */
-export default function App() {
-const [tab,     setTab]  = useState("sites");
-const [selId,   setSelId]= useState(null);
-const [modal,   setModal]= useState(null);
-const [showFl,  setFl]   = useState(false);
-const [showFac, setFac]  = useState(true);
-const [showMH,  setMH]   = useState(true);
-const [showS,   setS]    = useState(true);
-const [reset,   setReset]= useState(0);
-
-const C={bg:"#0a1628",panel:"#0f2042",p2:"#162d55",border:"#1e4080",accent:"#00d4ff",orange:"#ff6b35",gold:"#fbbf24",green:"#4ade80",muted:"#7ba7c4",text:"#e8f4fd"};
-const t=(a,b,v)=>v?a:b;
-
-return (
-<div style={{background:C.bg,color:C.text,fontFamily:"'Noto Sans TC','PingFang TC',system-ui,sans-serif",height:"100vh",display:"flex",flexDirection:"column",overflow:"hidden",fontSize:14}}>
-
-  {/* Header */}
-  <div style={{background:"linear-gradient(135deg,#0a1628,#0f2a55,#0a1628)",borderBottom:`2px solid ${C.accent}`,padding:"10px 14px",display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
-    <div style={{flex:1}}>
-      <div style={{fontSize:15,fontWeight:700,color:"#fff",lineHeight:1.3}}>115年臺南市雨水下水道訪評</div>
-      <div style={{fontSize:11,color:C.accent}}>歸仁區 5處現勘建議地點 — 選擇2處</div>
+  content.innerHTML = `
+    <div class="detail-title">地點 ${site.num}：${site.name}</div>
+    ${siltWarning}
+    <div class="detail-grid">
+      <div class="detail-item"><label>行政區</label><span>${site.district}</span></div>
+      <div class="detail-item"><label>行車時間（自水資中心）</label><span style="color:var(--gold)">約 ${site.driveMin} 分鐘</span></div>
+      <div class="detail-item"><label>調查日期</label><span>${site.surveyDate}</span></div>
+      <div class="detail-item"><label>人孔深度</label><span>${site.depth}</span></div>
+      <div class="detail-item"><label>淤積深度</label><span style="color:${parseInt(site.siltDepth)>0?'#ff6b35':'#4ade80'}">${site.siltDepth}</span></div>
+      <div class="detail-item"><label>水深</label><span>${site.waterDepth}</span></div>
     </div>
-    <span style={{background:C.accent,color:"#000",fontSize:11,fontWeight:700,padding:"2px 10px",borderRadius:20,whiteSpace:"nowrap"}}>115年度</span>
-  </div>
-
-  {/* Map */}
-  <div style={{height:"42%",position:"relative",background:"#080f1e",flexShrink:0}}>
-    <CanvasMap selectedId={selId} onSiteClick={id=>{setSelId(id);if(id)setTab("sites");}}
-      onManholeClick={setModal} showFl={showFl} showFac={showFac} showMH={showMH} showSites={showS} resetTick={reset}/>
-    <button onClick={()=>setReset(k=>k+1)}
-      style={{position:"absolute",top:8,left:8,background:"rgba(10,22,40,.88)",color:C.accent,border:`1px solid ${C.accent}`,borderRadius:8,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer",zIndex:10}}>
-      🔍 全覽
-    </button>
-    <div style={{position:"absolute",bottom:6,left:6,right:6,background:"rgba(8,15,30,.88)",borderRadius:8,padding:"4px 10px",display:"flex",gap:8,fontSize:10,color:"#bcd",flexWrap:"wrap",alignItems:"center"}}>
-      {showFac&&<><span>🔵 水資中心</span><span>🟡 高鐵站</span></>}
-      {showS&&<span>🟠 點位1–5</span>}
-      {showMH&&<span>🟢 人孔</span>}
-      {showFl&&<span>🔴 積淹水</span>}
-      <span style={{marginLeft:"auto",color:"#4a5e78",fontSize:9}}>雙指縮放｜拖曳移動</span>
+    <div class="detail-section">
+      <h4>人孔編號</h4>
+      <div class="manhole-tags">${site.manholes.map(m=>`<span class="manhole-tag">${m}</span>`).join('')}</div>
     </div>
-  </div>
-
-  {/* Sidebar */}
-  <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column",background:C.panel}}>
-    <div style={{display:"flex",borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
-      {[["sites","📍 現勘地點"],["layers","🗂️ 圖層"],["qr","📱 QR碼"]].map(([k,l])=>(
-        <button key={k} onClick={()=>setTab(k)} style={{flex:1,padding:"10px 4px",fontSize:12,fontWeight:600,background:"none",border:"none",cursor:"pointer",color:tab===k?C.accent:C.muted,borderBottom:tab===k?`3px solid ${C.accent}`:"3px solid transparent",transition:"all .15s"}}>{l}</button>
-      ))}
+    <div class="detail-section">
+      <h4>斷面尺寸</h4>
+      <div class="dimension-box">${site.dimension}<br><small style="color:var(--muted)">孔蓋：${site.coverType}</small></div>
     </div>
-
-    <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
-
-      {/* SITES */}
-      {tab==="sites"&&(
-        <div style={{padding:12}}>
-          <p style={{fontSize:11,color:C.muted,marginBottom:10,lineHeight:1.65,borderBottom:`1px solid ${C.border}`,paddingBottom:8}}>
-            ⚠️ 請委員從5處地點中<b style={{color:C.text}}>選擇2處</b>進行實地現勘<br/>
-            🚗 行車時間以<span style={{color:C.gold}}>永康水資源回收中心（仁愛街151號）</span>為起點
-          </p>
-          {SITES.map(site=>{
-            const isSel=site.id===selId;
-            return (
-              <div key={site.id} onClick={()=>setSelId(isSel?null:site.id)}
-                style={{background:C.p2,border:`1px solid ${isSel?C.accent:C.border}`,borderRadius:12,padding:12,marginBottom:8,cursor:"pointer",transition:"all .15s",boxShadow:isSel?"0 0 14px rgba(0,212,255,.25)":"none",position:"relative",overflow:"hidden"}}>
-                <div style={{position:"absolute",left:0,top:0,bottom:0,width:4,background:C.orange,borderRadius:"4px 0 0 4px"} }/>
-                <div style={{paddingLeft:8}}>
-                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
-                    <div style={{background:isSel?"#fff":C.orange,color:isSel?C.orange:"#fff",width:26,height:26,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,flexShrink:0}}>{site.id}</div>
-                    <div style={{fontSize:14,fontWeight:700,flex:1,lineHeight:1.3}}>{site.name}</div>
-                    <div style={{fontSize:11,fontWeight:600,background:"rgba(251,191,36,.15)",color:C.gold,padding:"2px 8px",borderRadius:20,whiteSpace:"nowrap"}}>🚗 {site.driveMin}min</div>
-                  </div>
-                  <div style={{fontSize:11,color:C.muted,marginBottom:2}}>📐 {site.dim}</div>
-                  <div style={{fontSize:11,color:C.muted,marginBottom:6}}>📍 {site.addr.replace("臺南市","")}</div>
-                  <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
-                    {site.manholes.map(mh=>(
-                      <span key={mh.id} onClick={e=>{e.stopPropagation();setModal(mh);}}
-                        style={{fontFamily:"monospace",fontSize:10,background:"rgba(0,212,255,.12)",color:C.accent,padding:"3px 9px",borderRadius:4,cursor:"pointer",border:"1px solid rgba(0,212,255,.25)"}}>
-                        🔍 {mh.id}
-                      </span>
-                    ))}
-                  </div>
-                  {isSel&&(
-                    <div style={{marginTop:10}}>
-                      <div style={{background:"rgba(0,212,255,.07)",border:"1px solid rgba(0,212,255,.18)",borderRadius:8,padding:"8px 10px",marginBottom:10,fontSize:12,color:"#b0cde8",lineHeight:1.6}}>{site.desc}</div>
-                      <button onClick={e=>{e.stopPropagation();window.open(`https://www.google.com/maps/dir/$${ORIGIN.lat},${ORIGIN.lng}/${site.lat},${site.lng}`,"_blank");}}
-                        style={{width:"100%",background:C.orange,color:"#fff",border:"none",borderRadius:8,padding:"10px 0",fontSize:13,fontWeight:700,cursor:"pointer"}}>
-                        🧭 Google Maps 導航（自永康水資中心出發）
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* LAYERS */}
-      {tab==="layers"&&(
-        <div style={{padding:14}}>
-          <div style={{fontSize:11,color:C.muted,textTransform:"uppercase",letterSpacing:1,marginBottom:12}}>圖層控制</div>
-          {[
-            {color:C.orange, label:"現勘地點（5處）",              val:showS,  set:setS},
-            {color:C.accent, label:"重要設施（水資中心、高鐵站）",  val:showFac,set:setFac},
-            {color:"#ff4444",label:"歸仁區積淹水點（含100m範圍圓）",val:showFl, set:setFl},
-            {color:C.green,  label:"人孔調查位置",                  val:showMH, set:setMH},
-          ].map(l=>(
-            <div key={l.label} onClick={()=>l.set(!l.val)}
-              style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,cursor:"pointer",padding:"8px 0",borderBottom:`1px solid ${C.border}`}}>
-              <div style={{width:14,height:14,borderRadius:"50%",background:l.color,flexShrink:0}}/>
-              <span style={{fontSize:13,flex:1}}>{l.label}</span>
-              <div style={{width:42,height:24,background:l.val?C.accent:C.border,borderRadius:12,position:"relative",flexShrink:0,transition:".2s"}}>
-                <div style={{position:"absolute",top:4,left:l.val?22:4,width:16,height:16,background:"#fff",borderRadius:"50%",transition:".2s"} }/>
-              </div>
-            </div>
-          ))}
-          <div style={{marginTop:10,background:"rgba(0,212,255,.05)",borderRadius:8,padding:"10px 12px"}}>
-            <div style={{fontSize:11,color:C.accent,fontWeight:700,marginBottom:8}}>地圖操作說明</div>
-            {["雙指捏合 / 滑鼠滾輪 → 縮放","單指拖曳 / 滑鼠拖曳 → 平移","點擊「🔍 全覽」→ 回到初始視角","點擊橘色數字圓圈 → 選取現勘地點","點擊綠色小點 → 查看人孔調查表","點擊🔍標籤 → 查看人孔調查表"].map((t,i)=>(
-              <div key={i} style={{fontSize:12,color:"#9ab3cc",marginBottom:5,paddingLeft:8,borderLeft:`2px solid ${C.accent}`,lineHeight:1.5}}>{t}</div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {tab==="qr"&&<QRGuide/>}
+    <div class="detail-section">
+      <h4>現場描述</h4>
+      <div style="font-size:12px;color:var(--muted);line-height:1.6">${site.description}</div>
     </div>
-  </div>
-
-  {modal&&<MH mh={modal} onClose={()=>setModal(null)}/>}
-</div>
-);
+    <div class="detail-section">
+      <h4>地圖定位與導航</h4>
+      <div style="display:flex;gap:8px">
+        <button onclick="openGoogleMaps(SITES[${site.id-1}])" style="flex:1;background:var(--accent2);color:#fff;border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:700;cursor:pointer">
+          🧭 Google Maps 導航
+        </button>
+        <button onclick="flyToSite(SITES[${site.id-1}]);closeDetail()" style="flex:1;background:var(--panel2);color:var(--accent);border:1px solid var(--accent);border-radius:8px;padding:10px;font-size:13px;font-weight:700;cursor:pointer">
+          📍 地圖定位
+        </button>
+      </div>
+    </div>
+  `;
+  panel.classList.add('open');
 }
+
+function closeDetail(){
+  document.getElementById('detail-panel').classList.remove('open');
+}
+
+function openGoogleMaps(site){
+  const origin = `${ORIGIN.lat},${ORIGIN.lng}`;
+  const dest = `${site.lat},${site.lng}`;
+  const url = `https://www.google.com/maps/dir/${origin}/${dest}/@${site.lat},${site.lng},15z/data=!3m1!4b1!4m2!4m1!3e0`;
+  window.open(url,'_blank');
+}
+
+function closeModal(){
+  document.getElementById('modal-overlay').classList.remove('open');
+}
+
+// ========= TABS =========
+function switchTab(tab){
+  document.querySelectorAll('.tab').forEach((t,i)=>{
+    t.classList.toggle('active', ['sites','layers','qr'][i]===tab);
+  });
+  document.querySelectorAll('.tab-content').forEach(c=>c.style.display='none');
+  document.getElementById('tab-'+tab).style.display='block';
+  activeTab = tab;
+}
+
+// ========= QR CODE =========
+function initQR(){
+  const url = window.location.href;
+  document.getElementById('qr-url-text').textContent = url;
+  try{
+    new QRCode(document.getElementById('qrcode'),{
+      text: url, width:180, height:180, colorDark:'#000',colorLight:'#fff', correctLevel: QRCode.CorrectLevel.M
+    });
+  } catch(e){}
+}
+
+// ========= INTRO =========
+function hideIntro(){
+  document.getElementById('intro').classList.add('hide');
+  setTimeout(()=>document.getElementById('intro').style.display='none',500);
+}
+
+// ========= INIT =========
+window.addEventListener('DOMContentLoaded', ()=>{
+  initMap();
+  buildSiteCards();
+  initQR();
+  if(window.innerWidth < 768){
+    setTimeout(()=>{
+      if(!document.getElementById('intro').classList.contains('hide')) hideIntro();
+    }, 8000);
+  }
+});
+</script>
+</body>
+</html>
