@@ -318,7 +318,7 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
 
 <script>
 // ========= DATA =========
-// 使用您最新提供的永康水資中心正確座標
+// 使用正確座標: 永康區仁愛街151號
 const ORIGIN = {lat:23.0492, lng:120.2511, name:'永康水資源回收中心', label:'起點'};
 const HSR = {lat:22.9501, lng:120.2894, name:'高鐵台南站', label:'高鐵站'};
 
@@ -334,7 +334,6 @@ const SITES = [
     coverType:'圓形 (0.60m)',
     surveyDate:'106/02/05',
     description:'各方向均有淤積，爬梯現況良好，內壁良好',
-    pdfs:['14234_a48_Extract_49_206_364_.pdf'],
     siltDepth:'10cm', waterDepth:'10cm',
     highlight: '箱涵淤積需清淤'
   },
@@ -349,7 +348,6 @@ const SITES = [
     coverType:'圓形 (0.55m)',
     surveyDate:'106/02/08',
     description:'孔蓋良好，路面平整，爬梯缺鐵鍊，內壁良好',
-    pdfs:['14232_F27__Extract_114_270_429_594_.pdf'],
     siltDepth:'0cm', waterDepth:'0cm',
     highlight: '大斷面箱涵，結構完好'
   },
@@ -364,7 +362,6 @@ const SITES = [
     coverType:'圓形 (0.60m)',
     surveyDate:'106/01/18',
     description:'孔蓋良好，路面平整，爬梯良好，內壁良好',
-    pdfs:['14233_A28_Extract_29_188_344_503_.pdf'],
     siltDepth:'0cm', waterDepth:'0cm',
     highlight: '淺埋型人孔，狀況良好'
   },
@@ -379,7 +376,6 @@ const SITES = [
     coverType:'圓形 (0.60m)',
     surveyDate:'106/01/17',
     description:'無淤積，孔蓋良好，路面平整，爬梯良好',
-    pdfs:['04234-A19_Extract_20_179_335_494_.pdf','04234-A20.pdf'],
     siltDepth:'0cm', waterDepth:'0cm',
     highlight: '最近距離18分，大型箱涵4.05m'
   },
@@ -394,7 +390,6 @@ const SITES = [
     coverType:'圓形 (0.60m)',
     surveyDate:'106/01/19',
     description:'淤積20cm，水深20cm，爬梯現況良好',
-    pdfs:['24235-H3_Extract_120_276_435_.pdf','24235-H2_Extract_119_275_434_.pdf'],
     siltDepth:'20cm', waterDepth:'20cm',
     highlight: '⚠️ 淤積20cm，需優先清淤'
   }
@@ -423,7 +418,6 @@ const FLOODING = [
 
 // ========= MAP =========
 let map, layerGroups = {}, activeTab = 'sites';
-let selectedSite = null;
 
 function initMap(){
   map = L.map('map',{
@@ -624,6 +618,10 @@ function showSiteDetail(site){
       <div style="font-size:12px;color:var(--muted);line-height:1.6">${site.description}</div>
     </div>
     <div class="detail-section">
+      <h4>座標</h4>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent)">${site.coords}</div>
+    </div>
+    <div class="detail-section">
       <h4>地圖定位與導航</h4>
       <div style="display:flex;gap:8px">
         <button onclick="openGoogleMaps(SITES[${site.id-1}])" style="flex:1;background:var(--accent2);color:#fff;border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:700;cursor:pointer">
@@ -694,3 +692,5 @@ window.addEventListener('DOMContentLoaded', ()=>{
 </script>
 </body>
 </html>
+
+}
