@@ -124,10 +124,11 @@ html,body{height:100%;overflow:hidden;font-family:"Noto Sans TC","PingFang TC","
 .mh-label{font-family:monospace;font-size:10px;background:rgba(8,15,30,.88);color:#4ade80;padding:2px 6px;border-radius:4px;border:1px solid #4ade80;white-space:nowrap;cursor:pointer}
 /* Responsive */
 @media(min-width:768px){
-  #app{flex-direction:row}
-  #map-wrap{width:60%;flex-shrink:0;height:100dvh}
-  #sidebar{width:40%;height:100dvh}
-  #map-wrap,#map{height:100dvh !important}
+  #app{flex-direction:column}
+  #body-row{display:flex;flex-direction:row;flex:1;overflow:hidden}
+  #map-wrap{width:60%;flex-shrink:0;height:100%}
+  #map{height:100% !important}
+  #sidebar{width:40%;height:100%}
   .gallery{grid-template-columns:1fr 1fr 1fr}
 }
 </style>
@@ -142,6 +143,7 @@ html,body{height:100%;overflow:hidden;font-family:"Noto Sans TC","PingFang TC","
     <span class="badge">115年度</span>
   </div>
 
+  <div id="body-row" style="display:flex;flex:1;overflow:hidden;flex-direction:column">
   <div id="map-wrap">
     <div id="map"></div>
     <div id="legend">
@@ -186,6 +188,8 @@ html,body{height:100%;overflow:hidden;font-family:"Noto Sans TC","PingFang TC","
     </div></div>
   </div>
 </div>
+
+</div><!-- end body-row -->
 
 <!-- Manhole / Site Detail Modal -->
 <div id="modal" onclick="if(event.target===this)closeModal()">
@@ -424,7 +428,7 @@ function buildCards(){
         <div class="caddr">📍 ${site.addr.replace('臺南市','')}</div>
         ${photoStrip}
         <div class="mhtags">
-          ${site.mhs.map(mh=>`<span class="mhtag" onclick="event.stopPropagation();openMH('${mh.id}')")>🔍 ${mh.id}</span>`).join('')}
+          ${site.mhs.map(mh=>`<span class="mhtag" onclick="event.stopPropagation();openMH('${mh.id}')">🔍 ${mh.id}</span>`).join('')}
         </div>
         <div class="card-detail" id="det-${site.id}" style="display:none">
           <div class="cdesc" style="margin-top:10px">${site.desc}</div>
@@ -522,12 +526,17 @@ function copyUrl(){
 // ── Responsive map height ──
 function resizeMap(){
   const mw=document.getElementById('map-wrap');
+  const br=document.getElementById('body-row');
+  const hdr=document.getElementById('hdr');
+  const hdrH=hdr.offsetHeight;
   if(window.innerWidth<768){
     mw.style.height=Math.round(window.innerHeight*0.42)+'px';
+    if(br){br.style.flexDirection='column';}
   } else {
-    mw.style.height='100dvh';
-    mw.style.position='sticky';
-    mw.style.top='0';
+    const avail=window.innerHeight-hdrH;
+    if(br){br.style.height=avail+'px';br.style.flexDirection='row';}
+    mw.style.height=avail+'px';
+    document.getElementById('sidebar').style.height=avail+'px';
   }
   map.invalidateSize();
 }
