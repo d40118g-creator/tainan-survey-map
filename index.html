@@ -114,7 +114,7 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
 }
 .site-actions{display:flex;gap:6px;margin-top:8px}
 .btn-small{
-  font-size:11px;padding:6px 10px;border:none;border-radius:6px;cursor:pointer;
+  font-size:11px;padding:4px 10px;border:none;border-radius:6px;cursor:pointer;
   font-weight:600;transition:.15s;
 }
 .btn-nav{background:var(--accent2);color:#fff}
@@ -151,7 +151,7 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
   font-size:13px;text-align:center;
 }
 
-/* Modal overlay */
+/* Overlay/modal */
 #modal-overlay{
   position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:2000;
   display:none;align-items:center;justify-content:center;padding:16px;
@@ -179,10 +179,31 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
 /* Legend */
 .legend-item{display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12px}
 
+/* Pulse animation for selected */
+@keyframes pulse-ring{
+  0%{box-shadow:0 0 0 0 rgba(0,212,255,0.6)}
+  70%{box-shadow:0 0 0 12px rgba(0,212,255,0)}
+  100%{box-shadow:0 0 0 0 rgba(0,212,255,0)}
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar{width:4px}
 ::-webkit-scrollbar-track{background:var(--panel)}
 ::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+
+/* Bottom nav */
+#bottom-bar{
+  position:fixed;bottom:0;left:0;right:0;
+  background:var(--panel);border-top:1px solid var(--border);
+  display:flex;z-index:500;
+}
+.bot-btn{
+  flex:1;padding:10px 4px;background:none;border:none;color:var(--muted);
+  font-size:10px;font-weight:600;cursor:pointer;display:flex;flex-direction:column;
+  align-items:center;gap:3px;transition:.15s;
+}
+.bot-btn.active,.bot-btn:hover{color:var(--accent)}
+.bot-icon{font-size:20px}
 
 /* Intro */
 #intro{
@@ -211,6 +232,7 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
 </head>
 <body>
 
+<!-- Intro screen -->
 <div id="intro">
   <div style="font-size:40px;margin-bottom:12px">🗺️</div>
   <h1>115年臺南市雨水下水道<br>訪評現勘地圖</h1>
@@ -230,6 +252,7 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
   <button class="start-btn" onclick="hideIntro()">進入地圖 →</button>
 </div>
 
+<!-- Header -->
 <div id="header">
   <div style="flex:1">
     <h1>115年臺南市雨水下水道訪評</h1>
@@ -238,6 +261,7 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
   <span class="badge">115年度</span>
 </div>
 
+<!-- Main app -->
 <div id="app">
   <div id="map"></div>
   <div id="sidebar">
@@ -247,6 +271,7 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
       <div class="tab" onclick="switchTab('qr')">📱 QR碼</div>
     </div>
 
+    <!-- Sites panel -->
     <div id="tab-sites" class="tab-content">
       <div id="sites-panel">
         <div style="font-size:11px;color:var(--muted);margin-bottom:10px;padding:4px 0;border-bottom:1px solid var(--border)">
@@ -257,6 +282,7 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
       </div>
     </div>
 
+    <!-- Layers panel -->
     <div id="tab-layers" class="tab-content" style="display:none">
       <div id="layers">
         <h3>圖層控制</h3>
@@ -291,6 +317,7 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
       </div>
     </div>
 
+    <!-- QR panel -->
     <div id="tab-qr" class="tab-content" style="display:none">
       <div id="qr-panel" style="padding:16px">
         <div style="font-size:13px;margin-bottom:8px;font-weight:600">📱 手機掃描QR Code查閱本地圖</div>
@@ -304,13 +331,15 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
   </div>
 </div>
 
+<!-- Detail panel -->
 <div id="detail-panel">
   <button class="detail-close" onclick="closeDetail()">✕</button>
   <div id="detail-content"></div>
 </div>
 
+<!-- Modal overlay -->
 <div id="modal-overlay" onclick="closeModal()">
-  <div class="modal" onclick="event.stopPropagation()">
+  <div class="modal" onclick="e=>e.stopPropagation()">
     <button class="modal-close" onclick="closeModal()">✕</button>
     <div id="modal-content"></div>
   </div>
@@ -318,8 +347,7 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
 
 <script>
 // ========= DATA =========
-// 使用正確座標: 永康區仁愛街151號
-const ORIGIN = {lat:23.0492, lng:120.2511, name:'永康水資源回收中心', label:'起點'};
+const ORIGIN = {lat:23.0316, lng:120.2337, name:'永康水資源回收中心', label:'起點'};
 const HSR = {lat:22.9501, lng:120.2894, name:'高鐵台南站', label:'高鐵站'};
 
 const SITES = [
@@ -333,7 +361,8 @@ const SITES = [
     depth:'1.220m',
     coverType:'圓形 (0.60m)',
     surveyDate:'106/02/05',
-    description:'各方向均有淤積，爬梯現況良好，內壁良好',
+    description:'人孔頂高程22.938m，淤積10cm/水深10cm',
+    pdfs:['14234_a48_Extract_49_206_364_.pdf'],
     siltDepth:'10cm', waterDepth:'10cm',
     highlight: '箱涵淤積需清淤'
   },
@@ -347,7 +376,8 @@ const SITES = [
     depth:'1.160m',
     coverType:'圓形 (0.55m)',
     surveyDate:'106/02/08',
-    description:'孔蓋良好，路面平整，爬梯缺鐵鍊，內壁良好',
+    description:'人孔頂高程20.599m，無淤積',
+    pdfs:['14232_F27__Extract_114_270_429_594_.pdf'],
     siltDepth:'0cm', waterDepth:'0cm',
     highlight: '大斷面箱涵，結構完好'
   },
@@ -361,7 +391,8 @@ const SITES = [
     depth:'0.730m',
     coverType:'圓形 (0.60m)',
     surveyDate:'106/01/18',
-    description:'孔蓋良好，路面平整，爬梯良好，內壁良好',
+    description:'人孔頂高程22.893m，無淤積',
+    pdfs:['14233_A28_Extract_29_188_344_503_.pdf'],
     siltDepth:'0cm', waterDepth:'0cm',
     highlight: '淺埋型人孔，狀況良好'
   },
@@ -375,7 +406,8 @@ const SITES = [
     depth:'2.060m / 1.750m',
     coverType:'圓形 (0.60m)',
     surveyDate:'106/01/17',
-    description:'無淤積，孔蓋良好，路面平整，爬梯良好',
+    description:'人孔頂高程20.856m / 20.024m，深埋大型箱涵',
+    pdfs:['04234-A19_Extract_20_179_335_494_.pdf','04234-A20.pdf'],
     siltDepth:'0cm', waterDepth:'0cm',
     highlight: '最近距離18分，大型箱涵4.05m'
   },
@@ -389,18 +421,19 @@ const SITES = [
     depth:'0.640m',
     coverType:'圓形 (0.60m)',
     surveyDate:'106/01/19',
-    description:'淤積20cm，水深20cm，爬梯現況良好',
+    description:'人孔頂高程25.488m / 25.495m，淤積20cm/水深20cm',
+    pdfs:['24235-H3_Extract_120_276_435_.pdf','24235-H2_Extract_119_275_434_.pdf'],
     siltDepth:'20cm', waterDepth:'20cm',
     highlight: '⚠️ 淤積20cm，需優先清淤'
   }
 ];
 
 const MANHOLES = [
-  {id:'24235-H2', lat:22.9737, lng:120.2988, area:'歸仁區大仁街323號前', depth:0.640},
-  {id:'24235-H3', lat:22.9739, lng:120.2992, area:'歸仁區大仁街395號前', depth:0.640},
-  {id:'04234-A19', lat:22.9651, lng:120.2832, area:'歸仁區大順街與中山七街口', depth:2.060},
-  {id:'04234-A20', lat:22.9653, lng:120.2815, area:'歸仁區大順街326號右前方', depth:1.750},
-  {id:'14232-F27', lat:22.9543, lng:120.2892, area:'歸仁區凱旋路二段路燈132前', depth:1.160},
+  {id:'24235-H2', lat:23.02462, lng:120.2987, area:'歸仁區大仁街323號前', depth:0.640},
+  {id:'24235-H3', lat:23.02460, lng:120.2942, area:'歸仁區大仁街395號前', depth:0.640},
+  {id:'04234-A19', lat:22.9670, lng:120.2831, area:'歸仁區大順街與中山七街口', depth:2.060},
+  {id:'04234-A20', lat:22.9670, lng:120.2814, area:'歸仁區大順街326號右前方', depth:1.750},
+  {id:'14232-F27', lat:22.9543, lng:120.2893, area:'歸仁區凱旋路二段路燈132前', depth:1.160},
   {id:'14233-A28', lat:22.9629, lng:120.2878, area:'歸仁區民權9街16號前', depth:0.730},
   {id:'14234-A48', lat:22.9683, lng:120.2900, area:'歸仁區國光街61號左前方', depth:1.220},
 ];
@@ -418,6 +451,7 @@ const FLOODING = [
 
 // ========= MAP =========
 let map, layerGroups = {}, activeTab = 'sites';
+let selectedSite = null;
 
 function initMap(){
   map = L.map('map',{
@@ -427,20 +461,21 @@ function initMap(){
   });
 
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
-    attribution:'© OpenStreetMap contributors © CARTO',
+    attribution:'&copy; OpenStreetMap contributors &copy; CARTO',
     subdomains:'abcd', maxZoom:19
   }).addTo(map);
 
   layerGroups.facilities = L.layerGroup().addTo(map);
   layerGroups.sites = L.layerGroup().addTo(map);
   layerGroups.manholes = L.layerGroup().addTo(map);
-  layerGroups.flooding = L.layerGroup(); 
+  layerGroups.flooding = L.layerGroup(); // not added by default
 
   addFacilities();
   addSiteMarkers();
   addManholeMarkers();
   addFloodingPoints();
 
+  // fit bounds
   setTimeout(()=>{
     const bounds = L.latLngBounds([
       [HSR.lat, HSR.lng],[ORIGIN.lat, ORIGIN.lng],
@@ -451,6 +486,7 @@ function initMap(){
 }
 
 function addFacilities(){
+  // Yongkang Water Resource Center
   const originIcon = L.divIcon({
     html:`<div style="background:#00d4ff;width:18px;height:18px;border-radius:50%;border:3px solid #fff;box-shadow:0 0 12px rgba(0,212,255,0.8)"></div>`,
     iconSize:[18,18], iconAnchor:[9,9], className:''
@@ -459,6 +495,7 @@ function addFacilities(){
     .bindPopup(`<b style="color:#00d4ff">🏭 ${ORIGIN.name}</b><br><span style="color:#666">訪評行程起點</span><br><small>座標: ${ORIGIN.lat.toFixed(4)}, ${ORIGIN.lng.toFixed(4)}</small>`)
     .addTo(layerGroups.facilities);
 
+  // Label for origin
   L.marker([ORIGIN.lat+0.004, ORIGIN.lng], {
     icon: L.divIcon({
       html:`<div style="background:rgba(0,212,255,0.9);color:#000;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;white-space:nowrap">永康水資中心（起點）</div>`,
@@ -466,6 +503,7 @@ function addFacilities(){
     })
   }).addTo(layerGroups.facilities);
 
+  // HSR
   const hsrIcon = L.divIcon({
     html:`<div style="background:#fbbf24;width:18px;height:18px;border-radius:50%;border:3px solid #fff;box-shadow:0 0 12px rgba(251,191,36,0.8)"></div>`,
     iconSize:[18,18], iconAnchor:[9,9], className:''
@@ -522,12 +560,17 @@ function addManholeMarkers(){
 
 function addFloodingPoints(){
   FLOODING.forEach(fp=>{
-    L.circle([fp.lat, fp.lng], {
-      radius: 100, color: '#ff4444', fillColor: '#ff4444', fillOpacity: 0.12, weight: 2, dashArray: '6 4'
+    const circle = L.circle([fp.lat, fp.lng], {
+      radius: 100,
+      color: '#ff4444',
+      fillColor: '#ff4444',
+      fillOpacity: 0.12,
+      weight: 2,
+      dashArray: '6 4'
     }).bindPopup(`<b style="color:#ff4444">🌊 積淹水點</b><br>${fp.name}<br><small>範圍：100公尺</small>`)
       .addTo(layerGroups.flooding);
 
-    L.circleMarker([fp.lat, fp.lng], {
+    const dot = L.circleMarker([fp.lat, fp.lng], {
       radius: 5, color:'#ff4444', fillColor:'#ff4444', fillOpacity:0.9, weight:2
     }).addTo(layerGroups.flooding);
   });
@@ -581,6 +624,7 @@ function buildSiteCards(){
 function flyToSite(site){
   map.flyTo([site.lat, site.lng], 17, {duration:1.5});
   site._marker && site._marker.openPopup();
+  // Highlight card
   document.querySelectorAll('.site-card').forEach(c=>c.classList.remove('highlight'));
   const card = document.getElementById('card-'+site.id);
   if(card){card.classList.add('highlight'); card.scrollIntoView({behavior:'smooth',block:'nearest'})}
@@ -641,6 +685,7 @@ function closeDetail(){
 }
 
 function openGoogleMaps(site){
+  // Opens Google Maps from origin to destination
   const origin = `${ORIGIN.lat},${ORIGIN.lng}`;
   const dest = `${site.lat},${site.lng}`;
   const url = `https://www.google.com/maps/dir/${origin}/${dest}/@${site.lat},${site.lng},15z/data=!3m1!4b1!4m2!4m1!3e0`;
@@ -667,7 +712,10 @@ function initQR(){
   document.getElementById('qr-url-text').textContent = url;
   try{
     new QRCode(document.getElementById('qrcode'),{
-      text: url, width:180, height:180, colorDark:'#000',colorLight:'#fff', correctLevel: QRCode.CorrectLevel.M
+      text: url,
+      width:180, height:180,
+      colorDark:'#000',colorLight:'#fff',
+      correctLevel: QRCode.CorrectLevel.M
     });
   } catch(e){}
 }
@@ -683,6 +731,7 @@ window.addEventListener('DOMContentLoaded', ()=>{
   initMap();
   buildSiteCards();
   initQR();
+  // Auto-hide intro after 8s on mobile if not interacted
   if(window.innerWidth < 768){
     setTimeout(()=>{
       if(!document.getElementById('intro').classList.contains('hide')) hideIntro();
@@ -692,5 +741,3 @@ window.addEventListener('DOMContentLoaded', ()=>{
 </script>
 </body>
 </html>
-
-}
